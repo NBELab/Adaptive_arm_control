@@ -33,7 +33,8 @@ import time
 from model import Model
 from OSC import OSC
 from utilities import euler_from_quaternion
-from adaptive_control import DynamicsAdaptation    
+from adaptive_control import DynamicsAdaptation  
+from integrator import Integrator  
         
 class Simulation:
     
@@ -100,6 +101,10 @@ class Simulation:
                                      0.08, 0.6, 0.7, 0.3, 0.6, 
                                      0.08, 1.4, 1.6, 0.7, 1.2]
             )
+        
+        self.integrator = Integrator()
+        self.integrator_current_position = []
+        self.integrator_dict = {}
             
     def visualize(self):
         """ visualizing the model with the initial configuration of the arm """
@@ -164,6 +169,14 @@ class Simulation:
                 # Terminate, or move to the next target when the EE is within 
                 # the threshold value of the target
                 if error < 1e-2:
+                    # get the integrator result and darw its final position
+                    # integrator_position = np.load("final_position.npy")[:3] + self.null_position
+                    # self.integrator_current_position = self.integrator.generate(self.integrator_dict)
+                    integrator_pos = self.integrator_current_position[:3] + self.null_position
+                    self.monitor_dict[exp]["integrator_pos"] = np.copy(integrator_pos)
+                    self.simulation.data.set_mocap_pos("integrator_pos", integrator_pos)
+                    self.viewer.render()
+
                     self.monitor_dict[exp]['steps'] = step
                     if self.return_to_null:
                         self.goto_null_position()
@@ -186,6 +199,12 @@ class Simulation:
                 position_array = [np.copy(position[i]) for i in range(5)]
                 velocity_array = [np.copy(velocity[i]) for i in range(5)]
                 
+                # save the velocity to a dict and feed it to the integrator
+                self.integrator_dict[step * self.dt] = velocity_array
+                self.integrator_current_position = self.integrator.generate({(step * self.dt):velocity_array}, self.dt)
+                integrator_pos = self.integrator_current_position[:3] + self.null_position
+                self.simulation.data.set_mocap_pos("integrator_pos", integrator_pos)
+
                 # If adaptation mode is on, that retireve the adapt signals
                 if self.adaptation:
                     u_adapt = np.zeros(self.model.n_joints)
@@ -228,6 +247,8 @@ class Simulation:
        
                     
         # End of simulation ----------------------------------------------------------------------
+        # np.save("integrator_dict.npy", self.integrator_dict)
+
         time.sleep(1.5)
         glfw.destroy_window(self.viewer.window)
     

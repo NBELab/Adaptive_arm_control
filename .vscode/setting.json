@@ -1,0 +1,18 @@
+{
+    "window.zoomLevel": 0,
+    "update.mode": "manual",
+    "cmake.configureOnOpen": true,
+    "workbench.colorTheme": "Default Light+",
+    "python.languageServer": "Pylance",
+    "cSpell.userWords": [
+        "keras",
+        "loadtxt",
+        "numpy",
+        "pyplot"
+    ],
+    "python.pythonPath": "C:\\Users\\estis\\AppData\\Local\\Programs\\Python\\Python36\\python.exe",
+    "terminal.integrated.shell.windows": "C:\\WINDOWS\\System32\\cmd.exe",
+    "terminal.integrated.env.windows": {
+      "Path": "${env:Path};C:\\Users\\estis\\.mujoco\\mujoco200\\bin"
+    } 
+}

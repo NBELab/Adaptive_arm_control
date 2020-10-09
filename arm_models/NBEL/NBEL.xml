@@ -31,6 +31,7 @@
         <exclude body1="target"    body2="link6"/>
         <exclude body1="target"    body2="EE"/>
         <exclude body1="EE"        body2="link6"/>
+        <exclude body1="integrator_pos"    body2="link6"/>
     </contact>
 
     <worldbody>
@@ -39,6 +40,10 @@
         
         <body name="target" pos="0 0 -0.15" mocap="true">
             <geom name="target" type="sphere" size="0.04" rgba="0 1 0 .5"/>
+        </body>
+
+        <body name="integrator_pos" pos="0 0 0" mocap="true">
+            <geom name="integrator_pos" type="sphere" size="0.04" rgba="250, 190, 88, 1"/>
         </body>
         
         <body name="hand" pos="0 0 0" mocap="true"/>
