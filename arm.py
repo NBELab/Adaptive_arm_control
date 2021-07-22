@@ -24,12 +24,14 @@ Khatib, Oussama.
 IEEE Journal on Robotics and Automation 3.1 (1987): 43-53. 
 
 """
+from collections import defaultdict
 
 import mujoco_py as mjc
 import numpy as np
 import glfw
 import time
 
+from SNN.ee_sensing import EndEffectorModel
 from model import Model
 from OSC import OSC
 from utilities import euler_from_quaternion
@@ -56,7 +58,6 @@ class Simulation:
         self.dt = sim_dt
         self.external_force_field = external_force
         self.n_gripper_joints = n_gripper_joints
-
         # Initiating the monitor dictionary
         if target is not None:
             self.monitor_dict = {}
@@ -72,7 +73,7 @@ class Simulation:
 
         # Initialize simulator
         self.simulation = mjc.MjSim(self.model.mjc_model)
-        self.viewer = mjc.MjViewer(self.simulation)
+        # self.viewer = mjc.MjViewer(self.simulation)
 
         # Get number of joints
         self.n_joints = int(len(
@@ -84,7 +85,9 @@ class Simulation:
         # Initiating pose
         self.goto_null_position()
         self.null_position = self.get_ee_position()
-
+        self.prev_ee_pos = self.null_position.copy()
+        self.ee_model = EndEffectorModel(n_neurons=1000, tau=0.6, transform=580, height0=self.null_position.copy())
+        self.from_time = 0
         # Initialize adaptive controller
         self.adaptation = adapt
         if adapt:
@@ -211,10 +214,15 @@ class Simulation:
 
                 # Actuating the arm, calculate error and update viewer ---------------------------
                 self.send_forces(u)
-                self.viewer.render()
+                # self.viewer.render()
 
                 # retrieve the position of the arm follow actuation
                 ee_position = self.get_ee_position()
+
+                # ee velocity (NOTE: above we have the full velocity array but this is simpler for now)
+                ee_vel = ee_position - self.prev_ee_pos
+                self.ee_model.update(ee_vel)
+                self.prev_ee_pos = ee_position.copy()
 
                 # Calculate error as the distance between the target and the position of the EE
                 error = np.sqrt(np.sum((np.array(target[:3]) - np.array(ee_position)) ** 2))
@@ -222,14 +230,16 @@ class Simulation:
                 # Monitoring  --------------------------------------------------------------------
 
                 self.monitor_dict[exp]['error'].append(np.copy(error))  # Error step
-                self.monitor_dict[exp]['ee_simulation'].append(np.copy(ee_position))  # Position of the EE
-                self.monitor_dict[exp]['ee_integrator'].append(np.copy(ee_position))  # Position of the EE
+                self.monitor_dict[exp]['ee_simulation'].append(
+                    np.copy(ee_position))  # Position of the EE
                 self.monitor_dict[exp]['q'].append(np.copy(position))  # Joints' angles
                 self.monitor_dict[exp]['dq'].append(np.copy(velocity))  # Joints' velocities
-
+            y_time, x = self.ee_model.get_xy()
+            self.monitor_dict[exp]['ee_integrator'] = x[self.from_time:]
+            self.from_time = len(y_time)  # divide position to experiments
         # End of simulation ----------------------------------------------------------------------
         time.sleep(1.5)
-        glfw.destroy_window(self.viewer.window)
+        # glfw.destroy_window(self.viewer.window)
 
     # Arm actuation methods ----------------------------------------------------------------------
 
@@ -358,7 +368,6 @@ class Simulation:
         from mpl_toolkits.mplot3d import axes3d
 
         # ratio numbers
-        columns = ['simulation', 'integrator']
         n_experiments = len(self.monitor_dict)
         fig = plt.figure(figsize=plt.figaspect(1 / n_experiments))
 
@@ -368,6 +377,7 @@ class Simulation:
             ax = fig.add_subplot(2, n_experiments, index, projection='3d')
             ax.set_title("End-Effector Trajectory (Target:{})".format(index))
             sim_ee = np.array(self.monitor_dict[exp]['ee_simulation'])
+
             integrator_ee = np.array(self.monitor_dict[exp]['ee_integrator'])
             ax.plot(*sim_ee.T, label='simulation')
             ax.plot(*integrator_ee.T, label='integrator')
@@ -376,7 +386,7 @@ class Simulation:
             # difference in simulation position and integrator value in the second row
             ax = fig.add_subplot(2, n_experiments, index + n_experiments)
             ax.set_title("End-Effector position difference (sim vs. integrator)".format(index))
-            ax.plot(np.linalg.norm(sim_ee - integrator_ee,axis=1), label='norm2 difference')
+            ax.plot(np.linalg.norm(sim_ee - integrator_ee, axis=1), label='norm2 difference')
             ax.legend()
 
         plt.show()
