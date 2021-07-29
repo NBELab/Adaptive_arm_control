@@ -24,6 +24,7 @@ Khatib, Oussama.
 IEEE Journal on Robotics and Automation 3.1 (1987): 43-53. 
 
 """
+import pickle
 from collections import defaultdict
 
 import mujoco_py as mjc
@@ -32,10 +33,13 @@ import glfw
 import time
 
 from SNN.ee_sensing import EndEffectorModel
-from model import Model
 from OSC import OSC
 from utilities import euler_from_quaternion
 from adaptive_control import DynamicsAdaptation
+
+
+def calc_error(x, y):
+    return np.sqrt(np.sum((x - y) ** 2))
 
 
 class Simulation:
@@ -48,8 +52,9 @@ class Simulation:
                  sim_dt=0.01,  # Simulation time step
                  external_force=None,  # External force field (implemented with scaled gravity)
                  adapt=False,  # Using adaptive controller
-                 n_gripper_joints=0):  # Number of actuated gripping points
+                 n_gripper_joints=0, n_neurons=None):  # Number of actuated gripping points
 
+        self.output = []  # tuple of (error,number of iteration) for each experiment
         self.model = model
         self.init_angles = init_angles
         self.target = target
@@ -84,9 +89,12 @@ class Simulation:
 
         # Initiating pose
         self.goto_null_position()
-        self.null_position = self.get_ee_position()
+        self.null_position = self.get_ee_position_from_sim()
         self.prev_ee_pos = self.null_position.copy()
-        self.ee_model = EndEffectorModel(n_neurons=1000, tau=0.6, transform=580, height0=self.null_position.copy())
+        if n_neurons is not None:
+            self.ee_model = EndEffectorModel(n_neurons=n_neurons, tau=0.1, transform=50,
+                                             height0=self.null_position.copy(), inp_synapse=None
+                                             )
         self.from_time = 0
         # Initialize adaptive controller
         self.adaptation = adapt
@@ -130,7 +138,7 @@ class Simulation:
 
         # Iterate over the predefined targets ---------------------------------------------------
         for exp in self.monitor_dict:
-
+            sum_sqr_err = 0
             # Terminate the simulation if it was signaled to using the ESC key
             if breaked:
                 break
@@ -181,7 +189,8 @@ class Simulation:
                 position, velocity = (self.get_angles(), self.get_velocity())
 
                 # Request the OSC to generate control signals to actuate the arm
-                u = self.controller.generate(position, velocity, target)
+
+                u = self.controller.generate(position, velocity, target, self.get_ee_position())
 
                 # Converting the retrieved dictionary to force arrays to be send to the arm
                 # Only the first 5 actuators are activated. 
@@ -217,29 +226,33 @@ class Simulation:
                 # self.viewer.render()
 
                 # retrieve the position of the arm follow actuation
-                ee_position = self.get_ee_position()
+                _ee_position = self.get_ee_position_from_sim()
 
-                # ee velocity (NOTE: above we have the full velocity array but this is simpler for now)
-                ee_vel = ee_position - self.prev_ee_pos
-                self.ee_model.update(ee_vel)
-                self.prev_ee_pos = ee_position.copy()
+                # ee velocity from simulation (outside sensor)
+                if hasattr(self, 'ee_model'):
+                    ee_vel = _ee_position - self.prev_ee_pos
+                    self.ee_model.update(ee_vel)
+                    self.prev_ee_pos = _ee_position.copy()
 
                 # Calculate error as the distance between the target and the position of the EE
-                error = np.sqrt(np.sum((np.array(target[:3]) - np.array(ee_position)) ** 2))
-
+                ee_xyz = self.get_ee_position()
+                error = calc_error(target, ee_xyz)
+                sum_sqr_err += error
                 # Monitoring  --------------------------------------------------------------------
 
                 self.monitor_dict[exp]['error'].append(np.copy(error))  # Error step
                 self.monitor_dict[exp]['ee_simulation'].append(
-                    np.copy(ee_position))  # Position of the EE
+                    np.copy(self.get_ee_position_smooth()))  # Position of the EE
                 self.monitor_dict[exp]['q'].append(np.copy(position))  # Joints' angles
                 self.monitor_dict[exp]['dq'].append(np.copy(velocity))  # Joints' velocities
-            y_time, x = self.ee_model.get_xy()
-            self.monitor_dict[exp]['ee_integrator'] = x[self.from_time:]
-            self.from_time = len(y_time)  # divide position to experiments
+            # y_time, x = self.ee_model.get_xy()
+            # self.monitor_dict[exp]['ee_integrator'] = x[self.from_time:]
+            # self.from_time = len(y_time)  # divide position to experiments
+            self.output.append((sum_sqr_err, step))
         # End of simulation ----------------------------------------------------------------------
         time.sleep(1.5)
         # glfw.destroy_window(self.viewer.window)
+        return self.output
 
     # Arm actuation methods ----------------------------------------------------------------------
 
@@ -265,7 +278,7 @@ class Simulation:
         self.simulation.step()
 
         # Update position of hand object
-        self.simulation.data.set_mocap_pos("hand", self.get_ee_position())
+        self.simulation.data.set_mocap_pos("hand", self.get_ee_position_from_sim())
 
         # Update orientation of hand object
         quaternion = np.copy(self.simulation.data.get_body_xquat("EE"))
@@ -275,6 +288,17 @@ class Simulation:
 
     def get_ee_position(self):
         """ Retrieve the position of the End Effector (EE) """
+        if hasattr(self, 'ee_model'):
+            return self.ee_model.get_curr_pos()
+        return self.get_ee_position_from_sim()
+
+    def get_ee_position_smooth(self):
+        """ Retrieve the position of the End Effector (EE) """
+        if hasattr(self, 'ee_model'):
+            return self.ee_model.get_curr_pos_smooth()
+        return self.get_ee_position_from_sim()
+
+    def get_ee_position_from_sim(self):
 
         return np.copy(self.simulation.data.get_body_xpos('EE'))
 
@@ -366,27 +390,39 @@ class Simulation:
 
         import matplotlib.pyplot as plt
         from mpl_toolkits.mplot3d import axes3d
-
+        from scipy.ndimage import gaussian_filter
         # ratio numbers
         n_experiments = len(self.monitor_dict)
-        fig = plt.figure(figsize=plt.figaspect(1 / n_experiments))
+        fig = plt.figure()
+        rows = int(np.sqrt(n_experiments))
+        cols = int(np.ceil(n_experiments / rows))
 
         # For each specified target 
         for index, exp in enumerate(self.monitor_dict, start=1):
             # position of ee and target
-            ax = fig.add_subplot(2, n_experiments, index, projection='3d')
-            ax.set_title("End-Effector Trajectory (Target:{})".format(index))
+            ax = fig.add_subplot(rows, cols, index, projection='3d')
             sim_ee = np.array(self.monitor_dict[exp]['ee_simulation'])
 
-            integrator_ee = np.array(self.monitor_dict[exp]['ee_integrator'])
-            ax.plot(*sim_ee.T, label='simulation')
-            ax.plot(*integrator_ee.T, label='integrator')
-            ax.scatter(*self.monitor_dict[exp]['target_real'], label="target", c="r")
+            # with open(f'simpos_exp_{index}.pkl', 'wb') as fp:
+            #     pickle.dump(sim_ee, fp)
+            with open(f'simpos_exp_{index}.pkl', 'rb') as fp:
+                fk_pos = pickle.load(fp)
+
+            real_target = self.monitor_dict[exp]['target_real']
+
+            ax.set_title(
+                "End-Effector Trajectory (Target:{})".format(index))
+
+            # integrator_ee = np.array(self.monitor_dict[exp]['ee_integrator'])
+            ax.plot(*sim_ee.T, label='integrator')
+            ax.plot(*fk_pos.T, label='simulation')
+            # ax.plot(*integrator_ee.T, label='integrator')
+            ax.scatter(*real_target, label="target", c="r")
             ax.legend()
             # difference in simulation position and integrator value in the second row
-            ax = fig.add_subplot(2, n_experiments, index + n_experiments)
-            ax.set_title("End-Effector position difference (sim vs. integrator)".format(index))
-            ax.plot(np.linalg.norm(sim_ee - integrator_ee, axis=1), label='norm2 difference')
-            ax.legend()
+            # ax = fig.add_subplot(2, n_experiments, index + n_experiments)
+            # ax.set_title("End-Effector position difference (sim vs. integrator)".format(index))
+            # ax.plot(np.linalg.norm(sim_ee - integrator_ee, axis=1), label='norm2 difference')
+            # ax.legend()
 
         plt.show()

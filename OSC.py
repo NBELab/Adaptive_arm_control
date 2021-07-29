@@ -13,31 +13,32 @@ IEEE Journal on Robotics and Automation 3.1 (1987): 43-53.
 
 import numpy as np
 
+
 class OSC:
-    
+
     def __init__(self, simulation, **kwarg):
-        
+
         self.simulation = simulation
-        
-        _DEFAULTS =  {'Kv': 20, 'Kp': 200, 'Ko': 200, 'Ki': 0, 'vmax': [0.5, 0]}              
-        self.control_dict = _DEFAULTS          
-        
+
+        _DEFAULTS = {'Kv': 20, 'Kp': 200, 'Ko': 200, 'Ki': 0, 'vmax': [0.5, 0]}
+        self.control_dict = _DEFAULTS
+
         for param in kwarg:
             self.control_dict[param] = kwarg[param]
-        
+
         self.control_dict['n_joints'] = self.simulation.model.n_joints
-                      
-        self.control_dict['task_space_gains'] = np.array([self.control_dict['Kp']] * 3 + [self.control_dict['Ko']] * 3)           
+
+        self.control_dict['task_space_gains'] = np.array([self.control_dict['Kp']] * 3 + [self.control_dict['Ko']] * 3)
         self.control_dict['lamb'] = self.control_dict['task_space_gains'] / self.control_dict['Kv']
         self.control_dict['scale_xyz'] = self.control_dict['sat_gain_xyz'] = \
-                        self.control_dict['vmax'][0] / self.control_dict['Kp'] * self.control_dict['Kv']
+            self.control_dict['vmax'][0] / self.control_dict['Kp'] * self.control_dict['Kv']
         self.control_dict['scale_abg'] = self.control_dict['sat_gain_abg'] = \
-                        self.control_dict['vmax'][1] / self.control_dict['Ko'] * self.control_dict['Kv']
-    
-    def generate (self, q, dq, target):
-                      
+            self.control_dict['vmax'][1] / self.control_dict['Ko'] * self.control_dict['Kv']
+
+    def generate(self, q, dq, target, ee_xyz):
+
         target_velocity = np.zeros(len(q.items()))
-                                   
+
         # isolate rows of Jacobian corresponding to controlled task space DOF
         # Particularly, shosing x,y,x among [x, y, z, alpha, beta, gamma] 
         J = self.simulation.get_Jacobian()
@@ -46,14 +47,13 @@ class OSC:
 
         # Getting the inertia matrix                           
         M = self.simulation.get_inertia_matrix()  # inertia matrix in joint space
-        Mx, M_inv = self._Mx(M=M, J=J)     # inertia matrix in task space
-        
+        Mx, M_inv = self._Mx(M=M, J=J)  # inertia matrix in task space
+
         # calculate the desired task space forces 
         u_task = np.zeros(6)
 
         # position controlled (orientation control TBA)
-        xyz = self.simulation.simulation.data.get_body_xpos("EE")
-        u_task[:3] = xyz - target[:3]
+        u_task[:3] = ee_xyz - target[:3]
 
         # task space integrated error 
         integrated_error = np.zeros(6)
@@ -67,7 +67,7 @@ class OSC:
         else:
             # otherwise apply specified gains
             u_task *= self.control_dict['task_space_gains']
-            
+
         # As there's no target velocity in task space,
         # compensate for velocity in joint space (more accurate)
         u = np.zeros(self.control_dict['n_joints'])
@@ -84,13 +84,12 @@ class OSC:
         # dynamics adaptation signal is being used
         # NOTE: do not include gravity or null controller in training signal
         self.training_signal = np.copy(u)
-        
+
         # add in gravity term in joint space ----------------------------------
         u -= self.simulation.get_gravity_bias()
 
-        
         return u
-      
+
     def _Mx(self, M, J, threshold=1e-3):
         """ Generate the task-space inertia matrix """
 
@@ -107,13 +106,13 @@ class OSC:
             Mx = np.linalg.pinv(Mx_inv, rcond=threshold * 0.1)
 
         return Mx, M_inv
-    
-    def _velocity_limiting(self, u_task): 
+
+    def _velocity_limiting(self, u_task):
         """ Scale the control signal to limit the velocity of the arm """
-        
+
         norm_xyz = np.linalg.norm(u_task[:3])
         norm_abg = np.linalg.norm(u_task[3:])
-                 
+
         scale = np.ones(6)
         if norm_xyz > self.control_dict['sat_gain_xyz']:
             scale[:3] *= self.control_dict['scale_xyz'] / norm_xyz

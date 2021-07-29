@@ -10,7 +10,7 @@ DIMENSIONS = 3
 
 
 class EndEffectorModel:
-    def __init__(self, n_neurons, tau, transform, inp_synapse=0.1, height0=np.zeros(DIMENSIONS)):
+    def __init__(self, n_neurons, tau, transform, inp_synapse=None, height0=np.zeros(DIMENSIONS)):
         self.model = nengo.Network()
         self.h_change = np.zeros(DIMENSIONS)
         self.heights0 = height0
@@ -27,13 +27,21 @@ class EndEffectorModel:
 
             nengo.Connection(self.stim, self.integrators.input, synapse=None)
 
-            self.probe_out = nengo.Probe(self.integrators.output, synapse=0.5)
+            self.probe_out = nengo.Probe(self.integrators.output)
+            self.probe_smooth = nengo.Probe(self.integrators.output, synapse=0.1)
 
-            self.sim = nengo.Simulator(self.model)
+            self.sim = nengo.Simulator(self.model, dt=0.002)
+            self.sim.step()
 
     def update(self, h_change):
         self.h_change = h_change.copy()
         self.sim.step()
+
+    def get_curr_pos(self):
+        return (self.sim.data[self.probe_out] + self.heights0)[-1]
+
+    def get_curr_pos_smooth(self):
+        return (self.sim.data[self.probe_smooth] + self.heights0)[-1]
 
     def get_xy(self):
         return self.sim.trange(), (self.sim.data[self.probe_out] + self.heights0)
