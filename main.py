@@ -16,7 +16,7 @@ target = [
     np.array([-0.20, -0.30, -0.10]),
     np.array([-0.20, -0.30, 0.10])
 ]
-nneurons = [10000]
+nneurons = [6000]
 for nn in nneurons:
     print(nn, ' neurons')
     simulation_ext = Simulation(model, init_angles, target=target, n_neurons=nn)

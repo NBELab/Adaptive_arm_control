@@ -27,21 +27,17 @@ class EndEffectorModel:
 
             nengo.Connection(self.stim, self.integrators.input, synapse=None)
 
-            self.probe_out = nengo.Probe(self.integrators.output)
-            self.probe_smooth = nengo.Probe(self.integrators.output, synapse=0.1)
-
-            self.sim = nengo.Simulator(self.model, dt=0.002)
+            self.probe_out = nengo.Probe(self.integrators.output, synapse=0.01)
+            self.dt = 0.002
+            self.sim = nengo.Simulator(self.model, dt=self.dt)
             self.sim.step()
 
     def update(self, h_change):
-        self.h_change = h_change.copy()
+        self.h_change = h_change #/ self.dt
         self.sim.step()
 
     def get_curr_pos(self):
         return (self.sim.data[self.probe_out] + self.heights0)[-1]
-
-    def get_curr_pos_smooth(self):
-        return (self.sim.data[self.probe_smooth] + self.heights0)[-1]
 
     def get_xy(self):
         return self.sim.trange(), (self.sim.data[self.probe_out] + self.heights0)

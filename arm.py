@@ -92,7 +92,7 @@ class Simulation:
         self.null_position = self.get_ee_position_from_sim()
         self.prev_ee_pos = self.null_position.copy()
         if n_neurons is not None:
-            self.ee_model = EndEffectorModel(n_neurons=n_neurons, tau=0.1, transform=50,
+            self.ee_model = EndEffectorModel(n_neurons=n_neurons, tau=0.1, transform=0.1,
                                              height0=self.null_position.copy(), inp_synapse=None
                                              )
         self.from_time = 0
@@ -178,6 +178,7 @@ class Simulation:
                     self.monitor_dict[exp]['steps'] = step
                     if self.return_to_null:
                         self.goto_null_position()
+                    print('new')
                     break  #
 
                 # Calculating control signals ----------------------------------------------------
@@ -197,7 +198,6 @@ class Simulation:
                 # The six'th actuator controls the EE orientation.
                 position_array = [np.copy(position[i]) for i in range(5)]
                 velocity_array = [np.copy(velocity[i]) for i in range(5)]
-
                 # If adaptation mode is on, that retireve the adapt signals
                 if self.adaptation:
                     u_adapt = np.zeros(self.model.n_joints)
@@ -230,29 +230,30 @@ class Simulation:
 
                 # ee velocity from simulation (outside sensor)
                 if hasattr(self, 'ee_model'):
-                    ee_vel = _ee_position - self.prev_ee_pos
+                    ee_vel = self.get_ee_velocity()
+
+                    # ee_vel = _ee_position - self.prev_ee_pos
                     self.ee_model.update(ee_vel)
-                    self.prev_ee_pos = _ee_position.copy()
+                    # self.prev_ee_pos = _ee_position.copy()
 
                 # Calculate error as the distance between the target and the position of the EE
-                ee_xyz = self.get_ee_position()
+                ee_xyz = self.get_ee_position_from_sim()
                 error = calc_error(target, ee_xyz)
-                sum_sqr_err += error
+                # sum_sqr_err += error
                 # Monitoring  --------------------------------------------------------------------
 
                 self.monitor_dict[exp]['error'].append(np.copy(error))  # Error step
-                self.monitor_dict[exp]['ee_simulation'].append(
-                    np.copy(self.get_ee_position_smooth()))  # Position of the EE
+                self.monitor_dict[exp]['ee_integrator'].append(self.get_ee_position())  # Position of the EE
                 self.monitor_dict[exp]['q'].append(np.copy(position))  # Joints' angles
                 self.monitor_dict[exp]['dq'].append(np.copy(velocity))  # Joints' velocities
             # y_time, x = self.ee_model.get_xy()
             # self.monitor_dict[exp]['ee_integrator'] = x[self.from_time:]
             # self.from_time = len(y_time)  # divide position to experiments
-            self.output.append((sum_sqr_err, step))
+            # self.output.append((sum_sqr_err, step))
         # End of simulation ----------------------------------------------------------------------
         time.sleep(1.5)
         # glfw.destroy_window(self.viewer.window)
-        return self.output
+        # return self.output
 
     # Arm actuation methods ----------------------------------------------------------------------
 
@@ -301,6 +302,10 @@ class Simulation:
     def get_ee_position_from_sim(self):
 
         return np.copy(self.simulation.data.get_body_xpos('EE'))
+
+    def get_ee_velocity(self):
+        # vel positional (xyz)
+        return self.simulation.data.get_body_xvelp('EE')
 
     def get_angles(self):
         """ Returns joint angles [rad] """
@@ -401,7 +406,7 @@ class Simulation:
         for index, exp in enumerate(self.monitor_dict, start=1):
             # position of ee and target
             ax = fig.add_subplot(rows, cols, index, projection='3d')
-            sim_ee = np.array(self.monitor_dict[exp]['ee_simulation'])
+            sim_int = np.array(self.monitor_dict[exp]['ee_integrator'])
 
             # with open(f'simpos_exp_{index}.pkl', 'wb') as fp:
             #     pickle.dump(sim_ee, fp)
@@ -414,7 +419,7 @@ class Simulation:
                 "End-Effector Trajectory (Target:{})".format(index))
 
             # integrator_ee = np.array(self.monitor_dict[exp]['ee_integrator'])
-            ax.plot(*sim_ee.T, label='integrator')
+            ax.plot(*sim_int.T, label='integrator')
             ax.plot(*fk_pos.T, label='simulation')
             # ax.plot(*integrator_ee.T, label='integrator')
             ax.scatter(*real_target, label="target", c="r")
