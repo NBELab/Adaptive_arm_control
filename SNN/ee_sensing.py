@@ -5,8 +5,8 @@ import nengo
 
 from SNN.networks.integrator_array import IntegratorArray
 
-N_INTEGRATORS = 3  # only ee for now
-DIMENSIONS = 1
+N_INTEGRATORS = 1  # only ee for now
+DIMENSIONS = 3
 
 
 class EndEffectorModel:

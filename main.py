@@ -96,19 +96,22 @@ target = [
 #     print(simpos)
 
 
-nneurons = [100, 1000, 1000]
-seperate_dim = [True, False]
-tau = [(0.01, 0.1, 0.5, 1)]
+nneurons = [100, 1000, 10000]
+# seperate_dim = [True, False]
+taus = [0.01, 0.1, 1]
 for nn in nneurons:
-    print(nn, ' neurons')
-
-
-
-
-
-    '''
-    adaptation code
-    '''
+    for tau in taus:
+        print(nn, ' neurons', tau, 'tau')
+        # simulation_ext = Simulation(model, init_angles, return_to_null=False, target=target, n_neurons=nn, tau=tau,
+        #                             external_force=None,
+        #                             adapt=False)
+        # output = simulation_ext.simulate(1500)
+        # with open(f'test_out/compare/{nn}_{tau}_1_integrators_3_dim.pkl', 'wb') as fp:
+        #     pickle.dump(output, fp)
+Simulation.plot_comparison()
+'''
+adaptation code
+'''
     # simulation_ext = Simulation(model, init_angles, return_to_null=False, target=target, n_neurons=nn,
     #                             external_force=1.5,
     #                             adapt=False)

@@ -24,8 +24,10 @@ Khatib, Oussama.
 IEEE Journal on Robotics and Automation 3.1 (1987): 43-53. 
 
 """
+import os
 import pickle
 from collections import defaultdict
+from itertools import product
 
 import mujoco_py as mjc
 import numpy as np
@@ -52,7 +54,7 @@ class Simulation:
                  sim_dt=0.01,  # Simulation time step
                  external_force=None,  # External force field (implemented with scaled gravity)
                  adapt=False,  # Using adaptive controller
-                 n_gripper_joints=0, n_neurons=None):  # Number of actuated gripping points
+                 n_gripper_joints=0, n_neurons=None, tau=0.1):  # Number of actuated gripping points
 
         self.output = []  # tuple of (error,number of iteration) for each experiment
         self.model = model
@@ -92,7 +94,7 @@ class Simulation:
         self.null_position = self.get_ee_position_from_sim()
         self.prev_ee_pos = self.null_position.copy()
         if n_neurons is not None:
-            self.ee_model = EndEffectorModel(n_neurons=n_neurons, tau=0.1, transform=0.1,
+            self.ee_model = EndEffectorModel(n_neurons=n_neurons, tau=tau, transform=tau / 0.1,
                                              height0=self.null_position.copy().T, inp_synapse=None
                                              )
         self.from_time = 0
@@ -476,3 +478,47 @@ class Simulation:
             ax.legend()
 
         plt.show()
+
+    @staticmethod
+    def plot_comparison():
+
+        nneurons = [100, 1000, 10000]
+        dims_int = [(1, 3), (3, 1)]
+        taus = [0.01, 0.1, 1]
+
+        import matplotlib.pyplot as plt
+        f, axs = plt.subplots(6, 3, figsize=(10, 10))  # 2 dim options * 3 tau over 3 nn
+        f.subplots_adjust(left=0.3, wspace=0.1)
+        i = 0
+        for di in dims_int:
+            for tau in taus:
+                for nn in nneurons:
+                    file = f'test_out/compare/{nn}_{tau}_{di[1]}_integrators_{di[0]}_dim.pkl'
+                    with open(file, 'rb') as fp:
+                        monitor = pickle.load(fp)
+
+                    ax = axs.ravel()[i]
+                    for exp in monitor:
+                        ax.plot(monitor[exp]['error'], label=f'exp {exp}')
+
+                    i += 1
+        box = dict(facecolor='yellow', pad=5, alpha=0.2)
+        for ax, nn in zip(axs[0], nneurons):
+            ax.set_title(f'{nn} neurons', bbox=box)
+        for ax, (di, tau) in zip(axs[:, 0], product(dims_int, taus)):
+            ni = di[1]  # n integrators
+            nd = di[0]  # n dimensions
+            ax.set_ylabel(f'{ni} {plural("integrator", ni)} \n {nd} {plural("dimension", nd)} \n tau = {tau}',
+                          rotation=0, bbox=box,
+                          size='large')
+            ax.yaxis.set_label_coords(-0.6, 0.3)
+
+        # plt.legend(loc="upper left")
+        # f.tight_layout()
+        f.savefig('Figure_1.png')
+
+
+def plural(s, n):
+    if n > 1:
+        s += 's'
+    return s
