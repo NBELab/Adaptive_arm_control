@@ -5,17 +5,17 @@ import nengo
 
 from SNN.networks.integrator_array import IntegratorArray
 
-N_INTEGRATORS = 1  # only ee for now
-DIMENSIONS = 3
+N_INTEGRATORS = 3  # only ee for now
+DIMENSIONS = 1
 
 
 class EndEffectorModel:
     def __init__(self, n_neurons, tau, transform, inp_synapse=None, height0=np.zeros(DIMENSIONS)):
         self.model = nengo.Network()
-        self.h_change = np.zeros(DIMENSIONS)
+        self.h_change = np.zeros(DIMENSIONS * N_INTEGRATORS)
         self.heights0 = height0
         with self.model:
-            self.stim = nengo.Node(lambda t: self.h_change)
+            self.stim = nengo.Node(lambda t: self.h_change.T)
 
             self.integrators = IntegratorArray(n_neurons=n_neurons,
                                                n_ensembles=N_INTEGRATORS,
@@ -33,7 +33,7 @@ class EndEffectorModel:
             self.sim.step()
 
     def update(self, h_change):
-        self.h_change = h_change #/ self.dt
+        self.h_change = h_change.T  # / self.dt
         self.sim.step()
 
     def get_curr_pos(self):

@@ -84,7 +84,7 @@ class Simulation:
         self.n_joints = int(len(
             self.simulation.data.get_body_jacp('EE')) / 3)  # Jacobian translational component (jacp)
 
-        # Intializing Operational Space Controller (OSC)         
+        # Intializing Operational Space Controller (OSC)
         self.controller = OSC(self)
 
         # Initiating pose
@@ -93,7 +93,7 @@ class Simulation:
         self.prev_ee_pos = self.null_position.copy()
         if n_neurons is not None:
             self.ee_model = EndEffectorModel(n_neurons=n_neurons, tau=0.1, transform=0.1,
-                                             height0=self.null_position.copy(), inp_synapse=None
+                                             height0=self.null_position.copy().T, inp_synapse=None
                                              )
         self.from_time = 0
         # Initialize adaptive controller
@@ -237,7 +237,7 @@ class Simulation:
                     # self.prev_ee_pos = _ee_position.copy()
 
                 # Calculate error as the distance between the target and the position of the EE
-                ee_xyz = self.get_ee_position_from_sim()
+                ee_xyz = self.get_ee_position()
                 error = calc_error(target, ee_xyz)
                 # sum_sqr_err += error
                 # Monitoring  --------------------------------------------------------------------
@@ -249,11 +249,11 @@ class Simulation:
             # y_time, x = self.ee_model.get_xy()
             # self.monitor_dict[exp]['ee_integrator'] = x[self.from_time:]
             # self.from_time = len(y_time)  # divide position to experiments
-            # self.output.append((sum_sqr_err, step))
+            self.output.append((sum_sqr_err, step))
         # End of simulation ----------------------------------------------------------------------
         time.sleep(1.5)
         # glfw.destroy_window(self.viewer.window)
-        # return self.output
+        return self.monitor_dict
 
     # Arm actuation methods ----------------------------------------------------------------------
 
@@ -410,7 +410,8 @@ class Simulation:
 
             # with open(f'simpos_exp_{index}.pkl', 'wb') as fp:
             #     pickle.dump(sim_ee, fp)
-            with open(f'simpos_exp_{index}.pkl', 'rb') as fp:
+
+            with open(f'simpos_exp_adapt_{index}.pkl', 'rb') as fp:
                 fk_pos = pickle.load(fp)
 
             real_target = self.monitor_dict[exp]['target_real']
@@ -429,5 +430,49 @@ class Simulation:
             # ax.set_title("End-Effector position difference (sim vs. integrator)".format(index))
             # ax.plot(np.linalg.norm(sim_ee - integrator_ee, axis=1), label='norm2 difference')
             # ax.legend()
+
+        plt.show()
+
+    @staticmethod
+    def show_adapt_exp():
+        """
+         Display monitored motion and performance of the arm
+         every experiment is a row and we have position (simulation), position (integrator)
+         expected: all lines merge in the process.
+        """
+
+        import matplotlib.pyplot as plt
+        with open('test_out/adaptation_exp/1000_adapt.pkl', 'rb') as fp:
+            adapt_monitor = pickle.load(fp)
+
+        with open('test_out/adaptation_exp/1000_no_adapt.pkl', 'rb') as fp:
+            no_adapt_monitor = pickle.load(fp)
+        from mpl_toolkits.mplot3d import axes3d
+        from scipy.ndimage import gaussian_filter
+        # ratio numbers
+        n_experiments = len(adapt_monitor)
+        fig = plt.figure()
+        rows = int(np.sqrt(n_experiments))
+        cols = int(np.ceil(n_experiments / rows))
+
+        # For each specified target
+        for index, exp in enumerate(adapt_monitor, start=1):
+            # position of ee and target
+            ax = fig.add_subplot(rows, cols, index, projection='3d')
+
+            adapt = np.array(adapt_monitor[exp]['ee_integrator'])
+            no_adapt = np.array(no_adapt_monitor[exp]['ee_integrator'])
+
+            real_target = adapt_monitor[exp]['target_real']
+
+            ax.set_title(
+                "End-Effector Trajectory (Target:{})".format(index))
+
+            # integrator_ee = np.array(self.monitor_dict[exp]['ee_integrator'])
+            ax.plot(*adapt.T, label='adaptive integrator')
+            ax.plot(*no_adapt.T, label='non-adaptive integrator')
+
+            ax.scatter(*real_target, label="target", c="r")
+            ax.legend()
 
         plt.show()
