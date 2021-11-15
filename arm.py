@@ -34,6 +34,8 @@ import numpy as np
 import glfw
 import time
 
+from matplotlib import gridspec
+
 from SNN.ee_sensing import EndEffectorModel
 from OSC import OSC
 from utilities import euler_from_quaternion
@@ -83,6 +85,8 @@ class Simulation:
         # self.viewer = mjc.MjViewer(self.simulation)
 
         # Get number of joints
+        self.n_neurons = n_neurons
+        self.tau = tau
         self.n_joints = int(len(
             self.simulation.data.get_body_jacp('EE')) / 3)  # Jacobian translational component (jacp)
 
@@ -94,7 +98,7 @@ class Simulation:
         self.null_position = self.get_ee_position_from_sim()
         self.prev_ee_pos = self.null_position.copy()
         if n_neurons is not None:
-            self.ee_model = EndEffectorModel(n_neurons=n_neurons, tau=tau, transform=tau / 0.1,
+            self.ee_model = EndEffectorModel(n_neurons=n_neurons, tau=tau, transform=tau,
                                              height0=self.null_position.copy().T, inp_synapse=None
                                              )
         self.from_time = 0
@@ -167,6 +171,14 @@ class Simulation:
                 if steps is not None:
                     if step > steps:
                         self.monitor_dict[exp]['steps'] = step
+                        if self.return_to_null:
+                            self.goto_null_position()
+                            if self.n_neurons is not None:
+                                self.ee_model = EndEffectorModel(n_neurons=self.n_neurons, tau=self.tau,
+                                                                 transform=self.tau,
+                                                                 height0=self.null_position.copy().T, inp_synapse=None
+                                                                 )
+                        print('new')
                         break
 
                 # Terminate simulation with ESC key
@@ -176,10 +188,15 @@ class Simulation:
 
                 # Terminate, or move to the next target when the EE is within 
                 # the threshold value of the target
-                if error < 1e-2:
+                if error < 0.005:
                     self.monitor_dict[exp]['steps'] = step
                     if self.return_to_null:
                         self.goto_null_position()
+                        if self.n_neurons is not None:
+                            self.ee_model = EndEffectorModel(n_neurons=self.n_neurons, tau=self.tau,
+                                                             transform=self.tau,
+                                                             height0=self.null_position.copy().T, inp_synapse=None
+                                                             )
                     print('new')
                     break  #
 
@@ -436,7 +453,7 @@ class Simulation:
         plt.show()
 
     @staticmethod
-    def show_adapt_exp():
+    def show_adapt_exp(nn):
         """
          Display monitored motion and performance of the arm
          every experiment is a row and we have position (simulation), position (integrator)
@@ -444,10 +461,10 @@ class Simulation:
         """
 
         import matplotlib.pyplot as plt
-        with open('test_out/adaptation_exp/1000_adapt.pkl', 'rb') as fp:
+        with open(f'test_out/adaptation_exp/{nn}_adapt.pkl', 'rb') as fp:
             adapt_monitor = pickle.load(fp)
 
-        with open('test_out/adaptation_exp/1000_no_adapt.pkl', 'rb') as fp:
+        with open(f'test_out/adaptation_exp/{nn}_no_adapt.pkl', 'rb') as fp:
             no_adapt_monitor = pickle.load(fp)
         from mpl_toolkits.mplot3d import axes3d
         from scipy.ndimage import gaussian_filter
@@ -482,11 +499,12 @@ class Simulation:
     @staticmethod
     def plot_comparison():
 
-        nneurons = [100, 1000, 10000]
+        nneurons = [100, 1000, 5000]
         dims_int = [(1, 3), (3, 1)]
         taus = [0.01, 0.1, 1]
 
         import matplotlib.pyplot as plt
+        # outer = gridspec.GridSpec(2, 2, wspace=0.2, hspace=0.2)
         f, axs = plt.subplots(6, 3, figsize=(10, 10))  # 2 dim options * 3 tau over 3 nn
         f.subplots_adjust(left=0.3, wspace=0.1)
         i = 0
@@ -498,9 +516,12 @@ class Simulation:
                         monitor = pickle.load(fp)
 
                     ax = axs.ravel()[i]
+                    errors = []
                     for exp in monitor:
-                        ax.plot(monitor[exp]['error'], label=f'exp {exp}')
-
+                        # ax.plot(monitor[exp]['error'], label=f'exp {exp}')
+                        error = np.ravel(monitor[exp]['error'])[-1]
+                        errors.append(error)
+                    ax.hist(errors)
                     i += 1
         box = dict(facecolor='yellow', pad=5, alpha=0.2)
         for ax, nn in zip(axs[0], nneurons):
@@ -516,6 +537,54 @@ class Simulation:
         # plt.legend(loc="upper left")
         # f.tight_layout()
         f.savefig('Figure_1.png')
+
+    @staticmethod
+    def adapt_vis_same(nn):
+        import matplotlib.pyplot as plt
+        from mpl_toolkits.mplot3d import axes3d
+
+        f = plt.figure()
+
+        with open(f'test_out/adaptation_exp/{nn}_adapt.pkl', 'rb') as fp:
+            adapt_monitor = pickle.load(fp)
+
+        with open(f'test_out/adaptation_exp/{nn}_no_adapt.pkl', 'rb') as fp:
+            no_adapt_monitor = pickle.load(fp)
+        # ratio numbers
+        n_experiments = len(adapt_monitor)
+
+        for i, (name, monitor) in enumerate(zip(('no adapt', 'adapt'), (no_adapt_monitor, adapt_monitor)), start=1):
+            ax = f.add_subplot(1, 2, i, projection='3d')
+            ax.set_title(name)
+            for exp in range(n_experiments):
+                real_target = monitor[exp]['target_real']
+                ax.scatter(*real_target, c='red')
+                traj = np.array(monitor[exp]['ee_integrator'])
+                ax.plot(*traj.T)
+
+        plt.show()
+
+    @staticmethod
+    def plot_adaptive_histogram():
+        import matplotlib.pyplot as plt
+
+        with open('test_out/adaptation_exp/1000_hist_adapt.pkl', 'rb') as fp:
+            adapt_monitor = pickle.load(fp)
+
+        with open('test_out/adaptation_exp/1000_hist_no_adapt.pkl', 'rb') as fp:
+            no_adapt_monitor = pickle.load(fp)
+        # ratio numbers
+        n_experiments = len(adapt_monitor)
+
+        for i, (name, monitor) in enumerate(zip(('no adapt', 'adapt'), (no_adapt_monitor, adapt_monitor)), start=1):
+            errors = []
+            for exp in range(n_experiments):
+                error = np.ravel(monitor[exp]['error'])[-1]
+                errors.append(error)
+            plt.hist(errors, label=name, alpha=0.5, bins=15)
+        plt.legend()
+        plt.title('Error distribution')
+        plt.show()
 
 
 def plural(s, n):

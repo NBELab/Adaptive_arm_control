@@ -2,6 +2,8 @@ import pickle
 from collections import defaultdict
 from time import sleep
 
+from mpl_toolkits.mplot3d import Axes3D
+
 from model import Model
 from arm import Simulation
 import numpy as np
@@ -9,121 +11,86 @@ import numpy as np
 model = Model('./arm_models/NBEL/NBEL.xml')
 
 init_angles = {0: -np.pi / 2, 1: 0, 2: np.pi / 2, 3: 0, 4: np.pi / 2, 5: 0}
-target = [
-    np.array([0.20, 0.10, -0.10]),
-    np.array([0.20, 0.10, 0.10]),
-    np.array([-0.20, 0.10, -0.10]),
-    np.array([-0.20, 0.10, 0.10]),
-    np.array([0.20, -0.30, -0.10]),
-    np.array([0.20, -0.30, 0.10]),
-    np.array([-0.20, -0.30, -0.10]),
-    np.array([-0.20, -0.30, 0.10])
-]
-# angles = [{1: 180, 2: 226, 3: 135, 4: 180, 5: 182, 6: 180, 7: 135, 8: 180, 9: 240},
-#           {1: 180, 2: 191, 3: 170, 4: 170, 5: 192, 6: 90, 7: 90, 8: 90, 9: 240},
-#           {1: 180, 2: 113, 3: 248, 4: 250, 5: 112, 6: 88, 7: 90, 8: 90, 9: 240},
-#           {1: 123, 2: 207, 3: 154, 4: 155, 5: 207, 6: 91, 7: 90, 8: 90, 9: 240},
-#           {1: 180, 2: 216, 3: 145, 4: 190, 5: 172, 6: 180, 7: 135, 8: 180, 9: 255},
-#           {1: 178, 2: 193, 3: 168, 4: 192, 5: 170, 6: 179, 7: 172, 8: 180, 9: 255},
-#           {1: 133, 2: 250, 3: 111, 4: 117, 5: 244, 6: 273, 7: 204, 8: 89, 9: 255},
-#           {1: 180, 2: 193, 3: 168, 4: 191, 5: 170, 6: 178, 7: 156, 8: 187, 9: 255},
-#           {1: 180, 2: 226, 3: 135, 4: 180, 5: 182, 6: 180, 7: 135, 8: 180, 9: 240},
-#           {1: 180, 2: 286, 3: 75, 4: 90, 5: 272, 6: 180, 7: 135, 8: 180, 9: 240}]
+# target = [[0.004358202720404778, 0.24968126663106002, 0.5839833688019348],
+#           [0.2133086524552455, 0.30231730697157366, 0.4238612165636782],
+#           [0.21829904526839308, 0.595476920837128, 0.19244056953420313],
+#           [0.29799319788035894, -0.05902493579330757, 0.41552920456478243],
+#           [0.005174658043600888, 0.2964559607701945, 0.6095851270425379],
+#           [0.025071336042124102, 0.4687363346289538, 0.602869835708902],
+#           [0.22613913482978693, 0.08993043535163768, 0.3282380230416459],
+#           [0.011320422985028824, 0.47936992528843325, 0.5371649284032374],
+#           [0.004358202720404778, 0.24968126663106002, 0.5839833688019348],
+#           [0.002855880644787611, 0.16361329256190973, 0.07169673053224164]]
 #
-# simulation_ext = Simulation(model, init_angles)
+# simulation_ext = Simulation(model, init_angles, return_to_null=False, target=target, n_neurons=None, tau=None,
+#                             external_force=None,
+#                             adapt=False)
+# output = simulation_ext.simulate(1000)
+# with open(f'test_out/recording/pos.pkl', 'wb') as fp:
+#     pickle.dump(output, fp)
 
-#
-# def add_angles(x, y):
-#     return (x + y) % (2 * np.pi) - np.pi
-#
-#
-# def wrap_angle(x):
-#     if -np.pi <= x <= np.pi:
-#         return x
-#     elif x > np.pi:
-#         return x - 2 * np.pi
-#     elif x < -np.pi:
-#         return x + 2 * np.pi
-#     else:
-#         raise Exception(x)
-
-#
-# # Offset angles for the physical arm in relative to the IK mpdel
-# offset_relative_to_IK_Model = {1: 90, 2: 180, 3: 180, 4: 180,
-#                                5: 180, 6: 0, 7: 180, 8: 0, 9: 0}
-# offset_relative_to_IK_Model_openu = {1: 181, 2: 180, 3: 180, 4: 180,
-#                                      5: 180, 6: 0, 7: 180, 8: 0, 9: 0}
-
-#
-# def robot_to_model_position(robot_position, openu=False):
-#     if openu:
-#         offset = offset_relative_to_IK_Model_openu
-#     else:
-#         offset = offset_relative_to_IK_Model
-#     return [np.deg2rad(robot_position[1] - offset[1]),
-#             -1 * np.deg2rad(robot_position[3] - offset[3]),
-#             -1 * np.deg2rad((360 - robot_position[4]) - offset[4]),
-#             np.deg2rad(robot_position[6] - offset[6]),
-#             -1 * np.deg2rad(robot_position[7] - offset[7])]
-#
-#
-# def model_to_robot_position(model_position, openu=False):
-#     if openu:
-#         offset = offset_relative_to_IK_Model_openu
-#     else:
-#         offset = offset_relative_to_IK_Model
-#     f = [(np.rad2deg(model_position[0]) + offset[1]) % 360,
-#          (np.rad2deg(-1 * model_position[1]) + offset[2]) % 360,
-#          360 - ((np.rad2deg(-1 * model_position[2]) + offset[4]) % 360),
-#          (np.rad2deg(model_position[3]) + offset[6]) % 360,
-#          (np.rad2deg(-1 * model_position[4]) + offset[7]) % 360]
-#     return {1: f[0], 2: 361 - f[1], 3: f[1], 4: f[2],
-#             5: 361 - f[2], 6: f[3], 7: f[4], 8: 180, 9: 180}
-
-
-# for a in angles:
-#     pos = robot_to_model_position(a, openu=True)
-#     # pos2 = [wrap_angle(p) for p in pos]
-#     pos = {i: p for i, p in enumerate(pos)}
-#     for i in range(500):
-#         simulation_ext.send_target_angles(pos)
-#         simulation_ext.simulation.step()
-#         simulation_ext.viewer.render()
-#
-#     # sleep(5)
-#     simpos = simulation_ext.get_ee_position_from_sim()
-#     simpos = str(simpos).replace(' ', ',').replace('[', '').replace(']', '').replace(',,', ',')
-#     print(simpos)
-
-
-nneurons = [100, 1000, 10000]
+# nneurons = [5000]
 # seperate_dim = [True, False]
-taus = [0.01, 0.1, 1]
-for nn in nneurons:
-    for tau in taus:
-        print(nn, ' neurons', tau, 'tau')
-        # simulation_ext = Simulation(model, init_angles, return_to_null=False, target=target, n_neurons=nn, tau=tau,
-        #                             external_force=None,
-        #                             adapt=False)
-        # output = simulation_ext.simulate(1500)
-        # with open(f'test_out/compare/{nn}_{tau}_1_integrators_3_dim.pkl', 'wb') as fp:
-        #     pickle.dump(output, fp)
+# taus = [0.01, 0.1, 1]
+# n_targets = 40
+# targetsx = np.random.uniform(-.20, .20, size=n_targets)
+# targetsy = np.random.uniform(-.30, .10, size=n_targets)
+# targetsz = np.random.uniform(-.10, .10, size=n_targets)
+# target = np.array([targetsx, targetsy, targetsz]).T
+# for nn in nneurons:
+#     for tau in taus:
+#         print(nn, ' neurons', tau, 'tau')
+#         simulation_ext = Simulation(model, init_angles, return_to_null=True, target=target, n_neurons=nn, tau=tau,
+#                                     external_force=None,
+#                                     adapt=False)
+#         output = simulation_ext.simulate(1000)
+#         with open(f'test_out/compare/{nn}_{tau}_3_integrators_1_dim.pkl', 'wb') as fp:
+#             pickle.dump(output, fp)
 Simulation.plot_comparison()
-'''
-adaptation code
-'''
-    # simulation_ext = Simulation(model, init_angles, return_to_null=False, target=target, n_neurons=nn,
-    #                             external_force=1.5,
-    #                             adapt=False)
-    # output = simulation_ext.simulate(1500)
-    # with open(f'test_out/{nn}_no_adapt.pkl', 'wb') as fp:
-    #     pickle.dump(output, fp)
-    #
-    # print("With adapt")
-    # simulation_ext = Simulation(model, init_angles, return_to_null=False, target=target, n_neurons=nn,
-    #                             external_force=1.5,
-    #                             adapt=True)
-    # output = simulation_ext.simulate(1500)
-    # with open(f'test_out/{nn}_adapt.pkl', 'wb') as fp:
-    #     pickle.dump(output, fp)
-    # Simulation.show_adapt_exp()
+
+################### adaptation code ######################
+
+# nn = 1000
+# n_targets = 100
+# targetsx = np.random.uniform(-.20, .20, size=n_targets)
+# targetsy = np.random.uniform(-.30, .10, size=n_targets)
+# targetsz = np.random.uniform(-.10, .10, size=n_targets)
+# target = np.array([targetsx, targetsy, targetsz]).T
+#
+# import matplotlib.pyplot as plt
+#
+# Axes3D
+# ax = plt.figure().add_subplot(111, projection='3d')
+# ax.scatter(0, 0, c='black', label='origin')
+# ax.scatter(*np.array(target).T, c='red',label='targets')
+# plt.legend()
+# plt.title('Targets around origin')
+# plt.show()
+#
+#
+# # target = [
+# # np.array([-0.06648099, -0.29834369, -0.05161849]),
+# # np.array([ 0.14804096, -0.09987448,  0.06971978]),
+# # np.array([-0.06623986,  0.01225466 , 0.09050459]),
+# # np.array([ 0.0287609 ,  0.05786149, -0.02437095])
+# # ]
+# simulation_ext = Simulation(model, init_angles, return_to_null=True, target=target, n_neurons=nn,
+#                             external_force=1.5,
+#                             adapt=False)
+# output = simulation_ext.simulate(1000)
+# # with open(f'test_out/adaptation_exp/{nn}_no_adapt.pkl', 'wb') as fp:
+# with open(f'test_out/adaptation_exp/{nn}_hist_no_adapt.pkl', 'wb') as fp:
+#     pickle.dump(output, fp)
+#
+# print("With adapt")
+# simulation_ext = Simulation(model, init_angles, return_to_null=True, target=target, n_neurons=nn,
+#                             external_force=1.5,
+#                             adapt=True)
+# output = simulation_ext.simulate(1000)
+# # with open(f'test_out/adaptation_exp/{nn}_adapt.pkl', 'wb') as fp:
+# with open(f'test_out/adaptation_exp/{nn}_hist_adapt.pkl', 'wb') as fp:
+#     pickle.dump(output, fp)
+# # Simulation.show_adapt_exp(nn)
+# # Simulation.adapt_vis_same(nn)
+# #
+# Simulation.plot_adaptive_histogram()
