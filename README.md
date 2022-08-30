@@ -10,6 +10,7 @@ Wheelchair mounted robotic arms support people with upper extremity disabilities
 
 ### Prerequisites
 Python (anaconda distribution). availible in: https://www.anaconda.com/products/distribution
+
 MuJoCo simulation: https://mujoco.org/
 
 ### Execution
